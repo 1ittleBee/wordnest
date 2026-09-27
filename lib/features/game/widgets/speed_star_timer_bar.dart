@@ -72,30 +72,44 @@ class SpeedStarTimerBar extends StatelessWidget {
               // Left: Clock & Time display
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: badgeBg,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.timer_rounded,
-                      size: 18,
-                      color: barColor,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.timer_rounded,
+                          size: 18,
+                          color: barColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        timeText,
+                        style: GoogleFonts.hindSiliguri(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: barColor,
+                        ),
+                      ),
+                    ],
                   )
-                      .animate(target: isEmergency ? 1 : 0)
-                      .shake(duration: 400.ms, hz: 4)
-                      .scale(begin: const Offset(1, 1), end: const Offset(1.15, 1.15)),
-                  const SizedBox(width: 8),
-                  Text(
-                    timeText,
-                    style: GoogleFonts.hindSiliguri(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: barColor,
-                    ),
-                  ),
+                      .animate(
+                        target: isEmergency ? 1 : 0,
+                        onPlay: (c) {
+                          if (isEmergency) c.repeat(reverse: true);
+                        },
+                      )
+                      .scale(
+                        begin: const Offset(1, 1),
+                        end: const Offset(1.12, 1.12),
+                        duration: 380.ms,
+                        curve: Curves.easeInOut,
+                      ),
                   if (isEmergency) ...[
                     const SizedBox(width: 6),
                     Container(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/extensions/string_extensions.dart';
@@ -10,6 +11,7 @@ class WordListPanel extends StatelessWidget {
   final List<BanglaWord> targetWords;
   final Set<String> foundWords;
   final Map<String, Color> wordColors;
+  final String? lastFoundWordStr;
   final Function(BanglaWord)? onWordTap;
 
   const WordListPanel({
@@ -17,6 +19,7 @@ class WordListPanel extends StatelessWidget {
     required this.targetWords,
     required this.foundWords,
     required this.wordColors,
+    this.lastFoundWordStr,
     this.onWordTap,
   });
 
@@ -83,8 +86,9 @@ class WordListPanel extends StatelessWidget {
               final color = wordColors[word.word] ?? AppColors.correct;
 
               if (isFound) {
+                final isJustFound = word.word == lastFoundWordStr;
                 // Discovered Word Pill
-                return GestureDetector(
+                Widget pillWidget = GestureDetector(
                   onTap: () => onWordTap?.call(word),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
@@ -116,6 +120,19 @@ class WordListPanel extends StatelessWidget {
                     ),
                   ),
                 );
+
+                if (isJustFound) {
+                  pillWidget = pillWidget
+                      .animate(key: ValueKey('pill_pop_${word.word}'))
+                      .scale(
+                        begin: const Offset(0.7, 0.7),
+                        end: const Offset(1.0, 1.0),
+                        duration: 350.ms,
+                        curve: Curves.elasticOut,
+                      )
+                      .shimmer(duration: 500.ms, color: Colors.white70);
+                }
+                return pillWidget;
               } else {
                 // Word to find — Clearly visible!
                 return Container(

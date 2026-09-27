@@ -44,6 +44,11 @@ class GameState {
   final int totalSeconds;
   final bool isTimeOut;
   final bool emergencyHintTriggered;
+  final List<int> lastFoundIndices;
+  final String? lastFoundWordStr;
+  final int comboCount;
+  final DateTime? lastWordFoundTime;
+  final String? comboBanner;
 
   const GameState({
     this.level,
@@ -66,6 +71,11 @@ class GameState {
     this.totalSeconds = 60,
     this.isTimeOut = false,
     this.emergencyHintTriggered = false,
+    this.lastFoundIndices = const [],
+    this.lastFoundWordStr,
+    this.comboCount = 0,
+    this.lastWordFoundTime,
+    this.comboBanner,
   });
 
   GameState copyWith({
@@ -89,6 +99,11 @@ class GameState {
     int? totalSeconds,
     bool? isTimeOut,
     bool? emergencyHintTriggered,
+    List<int>? lastFoundIndices,
+    String? lastFoundWordStr,
+    int? comboCount,
+    DateTime? lastWordFoundTime,
+    String? comboBanner,
   }) {
     return GameState(
       level: level ?? this.level,
@@ -113,6 +128,11 @@ class GameState {
       isTimeOut: isTimeOut ?? this.isTimeOut,
       emergencyHintTriggered:
           emergencyHintTriggered ?? this.emergencyHintTriggered,
+      lastFoundIndices: lastFoundIndices ?? this.lastFoundIndices,
+      lastFoundWordStr: lastFoundWordStr ?? this.lastFoundWordStr,
+      comboCount: comboCount ?? this.comboCount,
+      lastWordFoundTime: lastWordFoundTime ?? this.lastWordFoundTime,
+      comboBanner: comboBanner,
     );
   }
 
@@ -475,7 +495,7 @@ class GameNotifier extends StateNotifier<GameState> {
       isWrongWord: true,
       feedbackMessage: 'আবার চেষ্টা করো!',
     );
-    Future.delayed(const Duration(milliseconds: 300), () {
+    Future.delayed(const Duration(milliseconds: 450), () {
       if (mounted) {
         state = state.copyWith(
           selectedIndices: [],
@@ -487,6 +507,23 @@ class GameNotifier extends StateNotifier<GameState> {
 
   void _handleWordFound(BanglaWord word, List<int> indices) {
     AudioService.playWordFound();
+
+    final now = DateTime.now();
+    int newCombo = 1;
+    String? comboBanner;
+    if (state.lastWordFoundTime != null &&
+        now.difference(state.lastWordFoundTime!) <= const Duration(seconds: 7)) {
+      newCombo = state.comboCount + 1;
+    }
+    if (newCombo >= 2) {
+      if (newCombo == 2) {
+        comboBanner = 'দারুণ! কম্বো x২ 🔥';
+      } else if (newCombo == 3) {
+        comboBanner = 'অসাধারণ! কম্বো x৩ ⚡';
+      } else {
+        comboBanner = 'অবিশ্বাস্য! কম্বো x$newCombo 💥';
+      }
+    }
 
     final newFoundWords = Set<String>.from(state.foundWords)..add(word.word);
     final color = _wordHighlightColors[newFoundWords.length % _wordHighlightColors.length];
@@ -539,6 +576,11 @@ class GameNotifier extends StateNotifier<GameState> {
       wordColors: newWordColors,
       selectedIndices: [],
       lastFoundWord: word,
+      lastFoundIndices: indices,
+      lastFoundWordStr: word.word,
+      comboCount: newCombo,
+      lastWordFoundTime: now,
+      comboBanner: comboBanner,
       feedbackMessage: isAllFound
           ? (stars == 3
               ? 'অসাধারণ! ৩ স্টার ও দ্বিগুণ কয়েন! 🌟'
@@ -550,6 +592,12 @@ class GameNotifier extends StateNotifier<GameState> {
       earnedCoins: earnedCoins,
       earnedStars: stars,
     );
+  }
+
+  void clearComboBanner() {
+    if (state.comboBanner != null) {
+      state = state.copyWith(comboBanner: null);
+    }
   }
 
   /// Use a Hint in the game

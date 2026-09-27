@@ -101,6 +101,14 @@ class _LetterGridState extends ConsumerState<LetterGrid> {
                   final isSelected = gameState.selectedIndices.contains(index);
                   final isDimmed = gameState.dimmedIndices.contains(index);
                   final isHinted = gameState.hintHighlightedIndices.contains(index);
+                  final isWrong = isSelected && gameState.isWrongWord;
+
+                  // Wave bounce order if part of last found word
+                  int? waveBounceOrder;
+                  final foundIdx = gameState.lastFoundIndices.indexOf(index);
+                  if (foundIdx != -1) {
+                    waveBounceOrder = foundIdx;
+                  }
 
                   // Determine color if part of found word
                   Color? foundColor;
@@ -115,10 +123,12 @@ class _LetterGridState extends ConsumerState<LetterGrid> {
                   return LetterCell(
                     cell: cell,
                     isSelected: isSelected,
+                    isWrong: isWrong,
                     isFound: cell.isFound,
                     isDimmed: isDimmed,
                     isHinted: isHinted,
                     foundColor: foundColor,
+                    waveBounceOrder: waveBounceOrder,
                     onTap: () {
                       gameNotifier.handleCellTap(index);
                     },
