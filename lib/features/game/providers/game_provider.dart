@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/extensions/string_extensions.dart';
@@ -39,6 +40,10 @@ class GameState {
   final String? feedbackMessage;
   final bool isWrongWord;
   final List<WordPlacement> placements;
+  final int remainingSeconds;
+  final int totalSeconds;
+  final bool isTimeOut;
+  final bool emergencyHintTriggered;
 
   const GameState({
     this.level,
@@ -57,6 +62,10 @@ class GameState {
     this.feedbackMessage,
     this.isWrongWord = false,
     this.placements = const [],
+    this.remainingSeconds = 60,
+    this.totalSeconds = 60,
+    this.isTimeOut = false,
+    this.emergencyHintTriggered = false,
   });
 
   GameState copyWith({
@@ -76,6 +85,10 @@ class GameState {
     String? feedbackMessage,
     bool? isWrongWord,
     List<WordPlacement>? placements,
+    int? remainingSeconds,
+    int? totalSeconds,
+    bool? isTimeOut,
+    bool? emergencyHintTriggered,
   }) {
     return GameState(
       level: level ?? this.level,
@@ -95,6 +108,11 @@ class GameState {
       feedbackMessage: feedbackMessage,
       isWrongWord: isWrongWord ?? this.isWrongWord,
       placements: placements ?? this.placements,
+      remainingSeconds: remainingSeconds ?? this.remainingSeconds,
+      totalSeconds: totalSeconds ?? this.totalSeconds,
+      isTimeOut: isTimeOut ?? this.isTimeOut,
+      emergencyHintTriggered:
+          emergencyHintTriggered ?? this.emergencyHintTriggered,
     );
   }
 
@@ -136,6 +154,17 @@ class PlayerProgressNotifier extends StateNotifier<PlayerProgress> {
     return success;
   }
 
+  Future<int> consumeFreeTry(int levelId) async {
+    final remaining = await _repo.consumeFreeTry(levelId);
+    state = _repo.getProgress();
+    return remaining;
+  }
+
+  Future<void> resetFreeTries(int levelId) async {
+    await _repo.resetFreeTries(levelId);
+    state = _repo.getProgress();
+  }
+
   Future<void> completeLevel({
     required int levelId,
     required int stars,
@@ -160,11 +189,14 @@ final gameProvider =
 class GameNotifier extends StateNotifier<GameState> {
   final PlayerProgressNotifier _progressNotifier;
   final GridGenerator _generator = GridGenerator();
+  Timer? _timer;
 
   GameNotifier(this._progressNotifier) : super(const GameState());
 
   /// Initialize a level and generate its letter grid
   void initLevel(Level level) {
+    _timer?.cancel();
+
     final wordsSplit = level.targetWords
         .map((w) => BanglaUtils.splitWord(w.word))
         .toList();
@@ -214,6 +246,95 @@ class GameNotifier extends StateNotifier<GameState> {
       selectedIndices: [],
       hintsUsed: 0,
       isCompleted: false,
+      remainingSeconds: 60,
+      totalSeconds: 60,
+      isTimeOut: false,
+      emergencyHintTriggered: false,
+    );
+
+    _startTimer();
+  }
+
+  /// Restart the current level
+  void restartLevel() {
+    if (state.level != null) {
+      initLevel(state.level!);
+    }
+  }
+
+  /// Pause the timer (e.g. when exit confirmation modal is shown)
+  void pauseTimer() {
+    _timer?.cancel();
+  }
+
+  /// Resume the timer (e.g. when player cancels exit modal and continues)
+  void resumeTimer() {
+    if (state.isCompleted || state.isTimeOut) return;
+    _startTimer();
+  }
+
+  /// Start the 60-second level countdown timer
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (state.isCompleted || state.isTimeOut) {
+        t.cancel();
+        return;
+      }
+
+      final newRemaining = state.remainingSeconds - 1;
+
+      if (newRemaining <= 0) {
+        t.cancel();
+        AudioService.playWrong();
+        state = state.copyWith(
+          remainingSeconds: 0,
+          isTimeOut: true,
+          feedbackMessage: 'সময় শেষ! আবার চেষ্টা করুন।',
+        );
+      } else {
+        // Trigger emergency hint when exactly 10 seconds remaining
+        if (newRemaining == 10 && !state.emergencyHintTriggered) {
+          _triggerEmergencyHint();
+        } else if (newRemaining <= 5) {
+          AudioService.playLetterTap();
+        }
+        state = state.copyWith(remainingSeconds: newRemaining);
+      }
+    });
+  }
+
+  /// Emergency hint triggered at 10 seconds remaining
+  void _triggerEmergencyHint() {
+    AudioService.playBirdChirp();
+    final unfoundWords = state.level?.targetWords
+            .where((w) => !state.foundWords.contains(w.word))
+            .toList() ??
+        [];
+    if (unfoundWords.isEmpty) return;
+
+    final targetWord = unfoundWords.first;
+    final firstChar = BanglaUtils.splitWord(targetWord.word).first;
+
+    int? hintCellIndex;
+    for (int i = 0; i < state.cells.length; i++) {
+      if (state.cells[i].letter == firstChar && !state.cells[i].isFound) {
+        hintCellIndex = i;
+        break;
+      }
+    }
+
+    state = state.copyWith(
+      emergencyHintTriggered: true,
+      hintHighlightedIndices: hintCellIndex != null
+          ? {...state.hintHighlightedIndices, hintCellIndex}
+          : state.hintHighlightedIndices,
+      feedbackMessage: '💡 শেষ ১০ সেকেন্ড! ফ্রি বর্ণ হিন্ট দেওয়া হয়েছে!',
+      isWrongWord: false,
     );
   }
 
@@ -382,16 +503,22 @@ class GameNotifier extends StateNotifier<GameState> {
     int stars = 3;
 
     if (isAllFound) {
-      // Calculate stars based on hints
-      if (state.hintsUsed == 0) {
+      _timer?.cancel();
+      final elapsed = state.totalSeconds - state.remainingSeconds;
+
+      // Calculate stars & coins based on speed timer:
+      // <= 30 seconds: 3 Stars + Double Coin Bonus!
+      // 31 to 50 seconds: 2 Stars
+      // > 50 seconds: 1 Star
+      if (elapsed <= 30) {
         stars = 3;
-        earnedCoins += 30; // perfect bonus
-      } else if (state.hintsUsed <= 2) {
+        earnedCoins = (newFoundWords.length * 10 + 30) * 2; // Double coin bonus!
+      } else if (elapsed <= 50) {
         stars = 2;
-        earnedCoins += 15;
+        earnedCoins = newFoundWords.length * 10 + 20;
       } else {
         stars = 1;
-        earnedCoins += 10;
+        earnedCoins = newFoundWords.length * 10 + 10;
       }
 
       AudioService.playLevelComplete();
@@ -412,7 +539,13 @@ class GameNotifier extends StateNotifier<GameState> {
       wordColors: newWordColors,
       selectedIndices: [],
       lastFoundWord: word,
-      feedbackMessage: isAllFound ? 'অসাধারণ! লেভেল সম্পূর্ণ!' : 'চমৎকার! "${word.word}" পাওয়া গেছে!',
+      feedbackMessage: isAllFound
+          ? (stars == 3
+              ? 'অসাধারণ! ৩ স্টার ও দ্বিগুণ কয়েন! 🌟'
+              : (stars == 2
+                  ? 'চমৎকার! ২ স্টার অর্জিত হয়েছে!'
+                  : 'ভালো খেলেছেন! ১ স্টার অর্জিত হয়েছে!'))
+          : 'চমৎকার! "${word.word}" পাওয়া গেছে!',
       isCompleted: isAllFound,
       earnedCoins: earnedCoins,
       earnedStars: stars,
@@ -576,5 +709,11 @@ class GameNotifier extends StateNotifier<GameState> {
 
   void clearHintHighlights() {
     state = state.copyWith(hintHighlightedIndices: {});
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 }

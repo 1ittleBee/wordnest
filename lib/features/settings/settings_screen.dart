@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/colors.dart';
@@ -318,9 +319,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPrivacyUrl() async {
-    final uri = Uri.parse('https://1ittlebee.github.io/wordnest/');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    const urlString = 'https://1ittlebee.github.io/wordnest/';
+    final uri = Uri.parse(urlString);
+    bool launched = false;
+
+    try {
+      launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+        );
+      }
+    } catch (_) {
+      launched = false;
+    }
+
+    if (!launched && mounted) {
+      await Clipboard.setData(const ClipboardData(text: urlString));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'লিংকটি কপি করা হয়েছে: $urlString',
+            style: GoogleFonts.hindSiliguri(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          backgroundColor: AppColors.primaryDark,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 

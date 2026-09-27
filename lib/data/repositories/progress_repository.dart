@@ -31,6 +31,21 @@ class ProgressRepository {
     return true;
   }
 
+  /// Consume a free try for a level
+  Future<int> consumeFreeTry(int levelId) async {
+    final current = getProgress();
+    final remaining = current.consumeFreeTry(levelId);
+    await HiveService.saveProgress(current);
+    return remaining;
+  }
+
+  /// Reset free tries for a level
+  Future<void> resetFreeTries(int levelId) async {
+    final current = getProgress();
+    current.resetFreeTries(levelId);
+    await HiveService.saveProgress(current);
+  }
+
   /// Complete a level and update stats
   Future<PlayerProgress> completeLevel({
     required int levelId,

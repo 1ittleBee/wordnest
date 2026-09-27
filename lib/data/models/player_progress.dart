@@ -31,6 +31,9 @@ class PlayerProgress {
   /// Total time played in seconds
   int totalTimePlayedSeconds;
 
+  /// Map of levelId -> remaining free tries (defaults to 3 per level)
+  Map<int, int> levelFreeTries;
+
   PlayerProgress({
     this.coins = 200, // Start with 200 coins
     this.currentDivisionIndex = 0,
@@ -42,9 +45,11 @@ class PlayerProgress {
     Set<String>? unlockedAchievements,
     this.totalHintsUsed = 0,
     this.totalTimePlayedSeconds = 0,
+    Map<int, int>? levelFreeTries,
   })  : levelStars = levelStars ?? {},
         completedLevels = completedLevels ?? {},
-        unlockedAchievements = unlockedAchievements ?? {};
+        unlockedAchievements = unlockedAchievements ?? {},
+        levelFreeTries = levelFreeTries ?? {};
 
   /// Get stars for a specific level
   int getStars(int levelId) => levelStars[levelId] ?? 0;
@@ -60,6 +65,22 @@ class PlayerProgress {
   int get currentStreak => dailyStreak;
   int get currentDivision => currentDivisionIndex;
 
+  /// Get remaining free tries for a level (defaults to 3)
+  int getFreeTries(int levelId) => levelFreeTries[levelId] ?? 3;
+
+  /// Consume one free try for a level
+  int consumeFreeTry(int levelId) {
+    final current = getFreeTries(levelId);
+    final remaining = (current - 1).clamp(0, 3);
+    levelFreeTries[levelId] = remaining;
+    return remaining;
+  }
+
+  /// Reset free tries for a level (e.g. after level completion or 10-coin retry)
+  void resetFreeTries(int levelId) {
+    levelFreeTries[levelId] = 3;
+  }
+
   /// Complete a level and update stats
   void completeLevel({
     required int levelId,
@@ -67,6 +88,7 @@ class PlayerProgress {
     required int coinsEarned,
   }) {
     completedLevels.add(levelId);
+    resetFreeTries(levelId);
     final previousStars = levelStars[levelId] ?? 0;
     if (stars > previousStars) {
       levelStars[levelId] = stars;
@@ -123,6 +145,8 @@ class PlayerProgress {
         'unlockedAchievements': unlockedAchievements.toList(),
         'totalHintsUsed': totalHintsUsed,
         'totalTimePlayedSeconds': totalTimePlayedSeconds,
+        'levelFreeTries':
+            levelFreeTries.map((k, v) => MapEntry(k.toString(), v)),
       };
 
   /// Deserialize from JSON map
@@ -145,6 +169,9 @@ class PlayerProgress {
           {},
       totalHintsUsed: json['totalHintsUsed'] as int? ?? 0,
       totalTimePlayedSeconds: json['totalTimePlayedSeconds'] as int? ?? 0,
+      levelFreeTries: (json['levelFreeTries'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(int.parse(k), v as int)) ??
+          {},
     );
   }
 }
